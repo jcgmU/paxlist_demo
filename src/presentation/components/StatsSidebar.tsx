@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { SearchBar } from './SearchBar';
-import { Users, Utensils, Accessibility, Baby, BarChart2, ChevronDown, Star, Diamond } from 'lucide-react';
+import { Users, Utensils, Accessibility, Baby, BarChart2, ChevronDown, Star, Diamond, ChefHat, Bell, CheckCircle2 } from 'lucide-react';
 import type { ParsedPassenger } from '../../infrastructure/mockData';
+import { getCabinClass } from '../../domain/cabinLookup';
+import { deriveMealSlots, buildCourses } from '../../domain/mealService';
 
 // ─── Sub-components defined OUTSIDE StatsSidebar to keep stable references ───
 
@@ -132,10 +134,126 @@ const StatCard: React.FC<StatCardProps> = ({ icon, label, value, color }) => (
   </div>
 );
 
+// ─── Comanda summary section ──────────────────────────────────────────────────
+
+import type { ServiceType } from '../../domain/mealService';
+import type { FlightManifest } from '../../infrastructure/mockData';
+import type { PassengerOrder } from '../store/useStore';
+
+interface ComandaSectionProps {
+  manifest: FlightManifest;
+  orders: Record<string, PassengerOrder>;
+  serviceType: ServiceType;
+}
+
+const ComandaSection: React.FC<ComandaSectionProps> = ({ manifest, orders, serviceType }) => {
+  const slots = deriveMealSlots(serviceType, manifest.departureTime);
+  const courses = buildCourses(serviceType, slots);
+
+  const businessPax = manifest.passengers.filter(
+    (p) => getCabinClass(manifest.aircraftType, p.seat) === 'business'
+  );
+
+  const getOrderForSeat = (seat: string) => orders[`${manifest.flightNumber}::${seat}`];
+
+  const comandasTomadas = businessPax.filter((p) => {
+    const order = getOrderForSeat(p.seat);
+    return order && slots.every((slot) => order[slot]?.platoFuerteId);
+  }).length;
+
+  // Por cada servicio con wakeUp, lista los asientos que quieren ser despertados
+  const wakeUpByCourse = courses
+    .filter((c) => c.hasWakeUp)
+    .map((c) => ({
+      label: c.label,
+      slot: c.slot,
+      seats: businessPax
+        .filter((p) => getOrderForSeat(p.seat)?.[c.slot]?.wakeUp)
+        .sort((a, b) => a.seat.localeCompare(b.seat, undefined, { numeric: true })),
+    }))
+    .filter((c) => c.seats.length > 0);
+
+  const serviceLabel = serviceType === 'INSIGNIA' ? 'Servicio Insignia' : 'Business Americas';
+
+  return (
+    <div className="mt-6 pt-4 border-t border-slate-100">
+      <div className="flex items-center gap-2 mb-3">
+        <ChefHat size={14} className="text-[#E20613]" />
+        <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+          Comanda Business
+        </h3>
+      </div>
+
+      {/* Badge servicio */}
+      <div className={`text-[9px] font-black px-2 py-1 rounded-full inline-block mb-3 ${
+        serviceType === 'INSIGNIA'
+          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+          : 'bg-blue-50 text-blue-700 border border-blue-200'
+      }`}>
+        {serviceLabel}
+      </div>
+
+      {/* Progreso */}
+      <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3 mb-3">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 size={14} className={comandasTomadas === businessPax.length ? 'text-green-500' : 'text-slate-300'} />
+          <span className="text-xs font-bold text-slate-600">Comandas</span>
+        </div>
+        <span className="text-sm font-black text-slate-800">
+          {comandasTomadas} / {businessPax.length}
+        </span>
+      </div>
+
+      {/* Barra de progreso */}
+      {businessPax.length > 0 && (
+        <div className="w-full h-1.5 bg-slate-100 rounded-full mb-4 overflow-hidden">
+          <div
+            className="h-full bg-green-500 rounded-full transition-all duration-500"
+            style={{ width: `${(comandasTomadas / businessPax.length) * 100}%` }}
+          />
+        </div>
+      )}
+
+      {/* Lista de despertar */}
+      {wakeUpByCourse.map(({ label, slot, seats }) => (
+        <div key={slot} className="mb-3">
+          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-900 rounded-lg mb-1.5">
+            <Bell size={10} className="text-amber-400 shrink-0" />
+            <span className="text-[9px] font-black text-white uppercase tracking-widest">
+              Despertar · {label}
+            </span>
+            <span className="ml-auto text-[9px] font-black text-slate-400">{seats.length}</span>
+          </div>
+          <div className="space-y-0.5 pl-1">
+            {seats.map((p) => (
+              <p key={p.seat} className="text-[11px] text-slate-700 leading-relaxed">
+                <span className="font-black text-slate-900">{p.seat}</span>
+                {' — '}
+                {p.lastName}, {p.firstName}
+              </p>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {wakeUpByCourse.length === 0 && comandasTomadas > 0 && (
+        <p className="text-[10px] text-slate-400 italic text-center">
+          Sin solicitudes de despertar
+        </p>
+      )}
+      {comandasTomadas === 0 && (
+        <p className="text-[10px] text-slate-400 italic text-center">
+          Ninguna comanda registrada aún
+        </p>
+      )}
+    </div>
+  );
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const StatsSidebar: React.FC = () => {
-  const { manifest, getFlightStats } = useStore();
+  const { manifest, getFlightStats, orders, getActiveServiceType } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
 
@@ -143,6 +261,7 @@ export const StatsSidebar: React.FC = () => {
 
   const { emptySeats, ssrCounts, totalMeals, totalPassengers, infantCount } = getFlightStats();
   const totalSSR = Object.values(ssrCounts).reduce((a, b) => a + b, 0);
+  const activeServiceType = getActiveServiceType();
 
   const diamondPax = manifest.passengers
     .filter(p => ['DIAM', 'D'].includes(p.status ?? ''))
@@ -184,18 +303,25 @@ export const StatsSidebar: React.FC = () => {
             cols={2}
           />
           <EliteSection diamondPax={diamondPax} goldPax={goldPax} />
+
+          {activeServiceType && (
+            <ComandaSection
+              manifest={manifest}
+              orders={orders}
+              serviceType={activeServiceType}
+            />
+          )}
         </div>
 
         <div className="mt-4 pt-4 border-t border-slate-100 shrink-0">
           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter text-center">
-            Avianca SeatMap Pro v1.1
+            Avianca SeatMap Pro v1.2
           </p>
         </div>
       </aside>
 
       {/* Mobile/Tablet (< lg): barra sticky fixed que expande hacia arriba */}
       <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
-        {/* Panel expansible — animado con max-height */}
         <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[70vh] opacity-100' : 'max-h-0 opacity-0'}`}>
           <div className="overflow-y-auto max-h-[70vh] px-4 pb-4 pt-4 space-y-3 bg-white border-t border-slate-100">
             <SearchBar />
@@ -219,6 +345,14 @@ export const StatsSidebar: React.FC = () => {
               cols={3}
             />
             <EliteSection diamondPax={diamondPax} goldPax={goldPax} />
+
+            {activeServiceType && (
+              <ComandaSection
+                manifest={manifest}
+                orders={orders}
+                serviceType={activeServiceType}
+              />
+            )}
           </div>
         </div>
 

@@ -7,13 +7,16 @@ import {
   Dog,
   Utensils,
   AlertCircle,
-  Search
+  Search,
+  CheckCircle2,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { AIRCRAFT_CONFIGS } from '../../domain/aircraftConfigs';
 import type { AircraftElement } from '../../domain/aircraftConfigs';
 import { FLIGHT_CODES } from '../../domain/flightCodes';
 import { getAircraftConfigKey } from '../../domain/aircraftMatch';
+import { getCabinClass } from '../../domain/cabinLookup';
+import { deriveMealSlots } from '../../domain/mealService';
 import type { ParsedPassenger } from '../../infrastructure/mockData';
 import { SearchBar } from './SearchBar';
 
@@ -24,17 +27,26 @@ const IconMap: Record<string, React.FC<{ size?: number; className?: string }>> =
 };
 
 export const SeatMap: React.FC = () => {
-  const { manifest, selectedSeat, setSelectedSeat, getPassengerBySeat, searchTerm } = useStore();
+  const { manifest, selectedSeat, setSelectedSeat, getPassengerBySeat, searchTerm, getOrder, getActiveServiceType } = useStore();
   const [showSearch, setShowSearch] = useState(false);
 
   if (!manifest) return null;
 
   const configKey = getAircraftConfigKey(manifest.aircraftType);
   const config = AIRCRAFT_CONFIGS[configKey];
+  const serviceType = getActiveServiceType();
+  const slots = serviceType ? deriveMealSlots(serviceType, manifest.departureTime) : [];
+
+  const hasCompleteOrder = (seatId: string) => {
+    if (getCabinClass(manifest.aircraftType, seatId) !== 'business') return false;
+    const order = getOrder(seatId);
+    if (!order || slots.length === 0) return false;
+    return slots.every((slot) => order[slot]?.platoFuerteId);
+  };
 
   return (
     <div className="flex flex-col lg:flex-row w-full lg:h-full gap-6 fade-in lg:overflow-hidden">
-      {/* Flight Header (Mobile only, visible on top of map) */}
+      {/* Flight Header (Mobile only) */}
       <div className="lg:hidden bg-white border-b">
         <div className="px-4 py-3 flex justify-between items-center">
           <div>
@@ -63,13 +75,14 @@ export const SeatMap: React.FC = () => {
         <div className="min-w-max lg:min-w-0 flex flex-col items-center p-8 bg-slate-50">
           <div className="w-full max-w-2xl bg-white rounded-[40px] shadow-2xl border border-slate-200 p-8 flex flex-col gap-4">
             {config.elements.map((element, idx) => (
-              <RenderElement 
-                key={`${config.id}-${idx}`} 
-                element={element} 
+              <RenderElement
+                key={`${config.id}-${idx}`}
+                element={element}
                 getPassenger={getPassengerBySeat}
                 selectedSeat={selectedSeat}
                 onSelect={setSelectedSeat}
                 searchTerm={searchTerm}
+                hasCompleteOrder={hasCompleteOrder}
               />
             ))}
           </div>
@@ -85,7 +98,8 @@ const RenderElement: React.FC<{
   selectedSeat: string | null;
   onSelect: (seat: string) => void;
   searchTerm: string;
-}> = ({ element, getPassenger, selectedSeat, onSelect, searchTerm }) => {
+  hasCompleteOrder: (seatId: string) => boolean;
+}> = ({ element, getPassenger, selectedSeat, onSelect, searchTerm, hasCompleteOrder }) => {
   
   if (element.type === 'facility') {
     const isOWE = element.doors.includes('OWE');
@@ -154,13 +168,14 @@ const RenderElement: React.FC<{
             }
 
             return (
-              <Seat 
-                key={seatId} 
-                id={seatId} 
-                passenger={passenger} 
+              <Seat
+                key={seatId}
+                id={seatId}
+                passenger={passenger}
                 isSelected={isSelected}
                 isHighlighted={isHighlighted}
                 isBlocked={isBlocked}
+                hasOrder={hasCompleteOrder(seatId)}
                 onClick={() => !isBlocked && onSelect(seatId)}
               />
             );
@@ -177,8 +192,9 @@ const Seat: React.FC<{
   isSelected: boolean;
   isHighlighted?: boolean;
   isBlocked?: boolean;
+  hasOrder?: boolean;
   onClick: () => void;
-}> = ({ id, passenger, isSelected, isHighlighted, isBlocked, onClick }) => {
+}> = ({ id, passenger, isSelected, isHighlighted, isBlocked, hasOrder, onClick }) => {
   
   // Determinación de color de fondo según reglas
   let bgColor = 'bg-slate-200'; // Libre
@@ -249,6 +265,13 @@ const Seat: React.FC<{
           </div>
         )}
       </div>
+
+      {/* Badge comanda completa (esquina inferior izquierda) */}
+      {hasOrder && (
+        <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 rounded-full bg-green-500 border-2 border-white flex items-center justify-center text-white shadow-sm">
+          <CheckCircle2 size={8} strokeWidth={3} />
+        </div>
+      )}
     </button>
   );
 };
