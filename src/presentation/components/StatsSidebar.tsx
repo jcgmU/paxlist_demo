@@ -140,13 +140,75 @@ import type { ServiceType } from '../../domain/mealService';
 import type { FlightManifest } from '../../infrastructure/mockData';
 import type { PassengerOrder } from '../store/useStore';
 
+// ─── Inventory helpers ────────────────────────────────────────────────────────
+
+function getZoneFromKey(key: string, flightNumber: string): 'A-D' | 'E-K' | null {
+  const seat = key.replace(`${flightNumber}::`, '');
+  const letter = seat.replace(/[0-9]/g, '').toUpperCase();
+  return letter <= 'D' ? 'A-D' : 'E-K';
+}
+
+function countConsumed(
+  orders: Record<string, PassengerOrder>,
+  flightNumber: string,
+  slot: string,
+  kind: 'plato' | 'entrada',
+  itemId: string,
+  zone: 'A-D' | 'E-K' | 'all'
+): number {
+  return Object.entries(orders)
+    .filter(([key]) => key.startsWith(`${flightNumber}::`))
+    .filter(([key]) => {
+      if (zone === 'all') return true;
+      return getZoneFromKey(key, flightNumber) === zone;
+    })
+    .filter(([_, order]) =>
+      kind === 'plato'
+        ? (order as any)[slot]?.platoFuerteId === itemId
+        : (order as any)[slot]?.entradaId === itemId
+    ).length;
+}
+
+// ─── InventoryBar ─────────────────────────────────────────────────────────────
+
+interface InventoryBarProps {
+  label: string;
+  consumed: number;
+  stock: number;
+  kind: 'plato' | 'entrada';
+}
+
+const InventoryBar: React.FC<InventoryBarProps> = ({ label, consumed, stock }) => {
+  const remaining = Math.max(0, stock - consumed);
+  const pct = stock > 0 ? (consumed / stock) * 100 : 0;
+  const isLow = remaining <= 2 && remaining > 0;
+  const isOut = remaining === 0;
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-[10px] text-slate-600 truncate flex-1 pr-2">{label}</span>
+        <span className={`text-[10px] font-black shrink-0 ${isOut ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-green-600'}`}>
+          {remaining}/{stock}
+        </span>
+      </div>
+      <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${isOut ? 'bg-red-400' : isLow ? 'bg-amber-400' : 'bg-green-400'}`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
 interface ComandaSectionProps {
   manifest: FlightManifest;
   orders: Record<string, PassengerOrder>;
   serviceType: ServiceType;
+  unavailable: Record<string, boolean>;
 }
 
-const ComandaSection: React.FC<ComandaSectionProps> = ({ manifest, orders, serviceType }) => {
+const ComandaSection: React.FC<ComandaSectionProps> = ({ manifest, orders, serviceType, unavailable: _unavailable }) => {
   const slots = deriveMealSlots(serviceType, manifest.departureTime);
   const courses = buildCourses(serviceType, slots);
 
@@ -246,6 +308,113 @@ const ComandaSection: React.FC<ComandaSectionProps> = ({ manifest, orders, servi
           Ninguna comanda registrada aún
         </p>
       )}
+
+      {/* Subsección Inventario */}
+      <div className="mt-4 pt-4 border-t border-slate-100">
+        <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3">Inventario</h3>
+        {courses.map(course => (
+          <div key={course.slot} className="mb-4">
+            <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
+              {course.label}
+            </p>
+            <div className="space-y-2">
+              {/* Entradas (solo Insignia) */}
+              {course.hasEntrada && course.entradas.map(item => {
+                const stock = item.stock ?? 0;
+                if (serviceType === 'INSIGNIA') {
+                  const adConsumed = countConsumed(orders, manifest.flightNumber, course.slot, 'entrada', item.id, 'A-D');
+                  const ekConsumed = countConsumed(orders, manifest.flightNumber, course.slot, 'entrada', item.id, 'E-K');
+                  const totalConsumed = adConsumed + ekConsumed;
+                  const totalStock = stock * 2;
+                  return (
+                    <InventoryBar
+                      key={item.id}
+                      label={item.name}
+                      consumed={totalConsumed}
+                      stock={totalStock}
+                      kind="entrada"
+                    />
+                  );
+                }
+                return null;
+              })}
+              {/* Platos */}
+              {course.platosFuertes.map(item => {
+                const stock = item.stock ?? 0;
+                if (serviceType === 'INSIGNIA') {
+                  const adConsumed = countConsumed(orders, manifest.flightNumber, course.slot, 'plato', item.id, 'A-D');
+                  const ekConsumed = countConsumed(orders, manifest.flightNumber, course.slot, 'plato', item.id, 'E-K');
+                  const totalConsumed = adConsumed + ekConsumed;
+                  return (
+                    <InventoryBar
+                      key={item.id}
+                      label={item.name}
+                      consumed={totalConsumed}
+                      stock={stock * 2}
+                      kind="plato"
+                    />
+                  );
+                } else {
+                  const consumed = countConsumed(orders, manifest.flightNumber, course.slot, 'plato', item.id, 'all');
+                  return (
+                    <InventoryBar
+                      key={item.id}
+                      label={item.name}
+                      consumed={consumed}
+                      stock={stock}
+                      kind="plato"
+                    />
+                  );
+                }
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Subsección Demanda insatisfecha */}
+      {(() => {
+        const unmetCounts: Record<string, { name: string; count: number; kind: 'plato' | 'entrada' }> = {};
+
+        Object.entries(orders)
+          .filter(([key]) => key.startsWith(`${manifest.flightNumber}::`))
+          .forEach(([_, order]) => {
+            slots.forEach(slot => {
+              const sel = (order as any)[slot];
+              if (sel?.unmetPlatoId) {
+                const item = courses.flatMap(c => c.platosFuertes).find(i => i.id === sel.unmetPlatoId);
+                if (item) {
+                  unmetCounts[sel.unmetPlatoId] ??= { name: item.name, count: 0, kind: 'plato' };
+                  unmetCounts[sel.unmetPlatoId].count++;
+                }
+              }
+              if (sel?.unmetEntradaId) {
+                const item = courses.flatMap(c => c.entradas).find(i => i.id === sel.unmetEntradaId);
+                if (item) {
+                  unmetCounts[sel.unmetEntradaId] ??= { name: item.name, count: 0, kind: 'entrada' };
+                  unmetCounts[sel.unmetEntradaId].count++;
+                }
+              }
+            });
+          });
+
+        const sorted = Object.values(unmetCounts).sort((a, b) => b.count - a.count).filter(x => x.count > 0);
+        if (sorted.length === 0) return null;
+
+        return (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3">Más pedidos (sin stock)</h3>
+            <div className="space-y-1.5">
+              {sorted.map((item, i) => (
+                <div key={i} className="flex items-center justify-between bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+                  <span className="text-[10px] font-bold text-slate-700 truncate flex-1 pr-2">{item.name}</span>
+                  <span className="text-[10px] font-black text-red-700 shrink-0">{item.count}×</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -253,7 +422,7 @@ const ComandaSection: React.FC<ComandaSectionProps> = ({ manifest, orders, servi
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const StatsSidebar: React.FC = () => {
-  const { manifest, getFlightStats, orders, getActiveServiceType } = useStore();
+  const { manifest, getFlightStats, orders, getActiveServiceType, unavailable } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
 
@@ -309,6 +478,7 @@ export const StatsSidebar: React.FC = () => {
               manifest={manifest}
               orders={orders}
               serviceType={activeServiceType}
+              unavailable={unavailable}
             />
           )}
         </div>
@@ -351,6 +521,7 @@ export const StatsSidebar: React.FC = () => {
                 manifest={manifest}
                 orders={orders}
                 serviceType={activeServiceType}
+                unavailable={unavailable}
               />
             )}
           </div>

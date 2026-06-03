@@ -1,9 +1,10 @@
-import { Plane, RotateCcw, FlaskConical, ChevronDown } from 'lucide-react';
+import { Plane, RotateCcw, FlaskConical, ChevronDown, ChefHat } from 'lucide-react';
 import { useStore } from './presentation/store/useStore';
 import { DemoSelector } from './presentation/components/DemoSelector';
 import { SeatMap } from './presentation/components/SeatMap';
 import { StatsSidebar } from './presentation/components/StatsSidebar';
 import { PassengerModal } from './presentation/components/PassengerModal';
+import { ComandaMode } from './presentation/components/ComandaMode';
 import type { ServiceType } from './domain/mealService';
 
 const SERVICE_OPTIONS: { value: ServiceType; label: string }[] = [
@@ -12,7 +13,7 @@ const SERVICE_OPTIONS: { value: ServiceType; label: string }[] = [
 ];
 
 function App() {
-  const { manifest, reset, serviceOverride, setServiceOverride, getActiveServiceType } = useStore();
+  const { manifest, reset, serviceOverride, setServiceOverride, getActiveServiceType, openComanda, getComandaStatus } = useStore();
   const activeService = getActiveServiceType();
 
   return (
@@ -73,6 +74,26 @@ function App() {
               )}
             </div>
 
+            {/* Botón Comanda con estado de color */}
+            {(() => {
+              const status = getComandaStatus();
+              const btnClass =
+                status === 'complete'
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : status === 'in-progress'
+                  ? 'bg-[#E20613] text-white hover:bg-red-700'
+                  : 'bg-white text-[#E20613] border border-[#E20613] hover:bg-red-50';
+              return (
+                <button
+                  onClick={openComanda}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${btnClass}`}
+                >
+                  <ChefHat size={14} />
+                  <span className="hidden sm:inline">Comanda</span>
+                </button>
+              );
+            })()}
+
             <button
               onClick={reset}
               className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all active:scale-95"
@@ -103,6 +124,7 @@ function App() {
               <StatsSidebar />
             </div>
             <PassengerModal />
+            <ComandaMode />
           </div>
         )}
       </main>
