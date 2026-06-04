@@ -114,8 +114,10 @@ function App() {
 
       <main className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
         {!manifest ? (
-          <div className="flex-1 overflow-y-auto flex items-center justify-center p-6">
-            <DemoSelector />
+          <div className="flex-1 overflow-y-auto">
+            <div className="min-h-full flex items-center justify-center p-6">
+              <DemoSelector />
+            </div>
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col lg:flex-row lg:h-full lg:overflow-hidden">
