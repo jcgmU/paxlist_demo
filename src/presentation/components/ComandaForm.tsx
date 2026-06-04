@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, BellOff, ChefHat, UtensilsCrossed, CheckCircle2, AlertCircle, UserX } from 'lucide-react';
+import { Bell, BellOff, ChefHat, UtensilsCrossed, CheckCircle2, UserX } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { buildCourses, deriveMealSlots, seatZone } from '../../domain/mealService';
 import type { MealSlot, MenuItem, CrewZone } from '../../domain/mealService';
@@ -79,7 +79,10 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
   const unavailableKey = `${manifest.flightNumber}::${passenger.seat}`;
   const isUnavailable = unavailable[unavailableKey] === true;
 
-  const isOrderComplete = courses.every((course) => {
+  // Pax con comida especial SSR ya están atendidos — solo queda el despertar
+  const hasSpecialMeal = ssrMeals.length > 0;
+
+  const isOrderComplete = hasSpecialMeal || courses.every((course) => {
     const sel = order[course.slot];
     if (!sel?.platoFuerteId) return false;
     if (course.hasEntrada && !sel?.entradaId) return false;
@@ -196,24 +199,53 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
         </span>
       </div>
 
-      {/* Alerta SSR de comidas */}
-      {ssrMeals.length > 0 && (
-        <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-          <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[10px] font-black text-amber-800 uppercase tracking-wide">
-              Restricción alimentaria SSR
-            </p>
-            <p className="text-[11px] text-amber-700 mt-0.5">
-              {ssrMeals.map((c) => `${c} — ${(FLIGHT_CODES.MEALS as Record<string, string>)[c]}`).join(' · ')}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Tarjetas de servicio */}
       {courses.map((course) => {
         const sel = order[course.slot] ?? {};
+
+        // ── Pax con comida especial SSR: solo despertar ──────────────────────
+        if (hasSpecialMeal) {
+          return (
+            <div key={course.slot} className="border border-amber-200 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 bg-amber-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{SLOT_ICONS[course.slot]}</span>
+                  <span className="text-sm font-black text-slate-800">{course.label}</span>
+                </div>
+                <CheckCircle2 size={16} className="text-amber-500" />
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                  <p className="text-[10px] font-black text-amber-700 uppercase tracking-wide mb-1.5">
+                    Comida especial pre-registrada
+                  </p>
+                  {ssrMeals.map((code) => (
+                    <p key={code} className="text-xs text-amber-900 leading-relaxed">
+                      <span className="font-black">{code}</span>
+                      {' — '}
+                      {(FLIGHT_CODES.MEALS as Record<string, string>)[code]}
+                    </p>
+                  ))}
+                </div>
+                {course.hasWakeUp && (
+                  <button
+                    onClick={() => setCourseSelection(passenger.seat, course.slot, { wakeUp: !sel.wakeUp })}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
+                      sel.wakeUp
+                        ? 'bg-slate-900 border-slate-900 text-white'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">¿Despertar para {course.label.toLowerCase()}?</span>
+                    {sel.wakeUp ? <Bell size={16} className="text-amber-400" /> : <BellOff size={16} />}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        // ── Pax normal ──────────────────────────────────────────────────────
         const isComplete = !!sel.platoFuerteId && (!course.hasEntrada || !!sel.entradaId);
 
         return (
@@ -223,7 +255,6 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
               isComplete ? 'border-green-200 bg-green-50/30' : 'border-slate-200 bg-white'
             }`}
           >
-            {/* Header de la tarjeta */}
             <div className={`px-4 py-3 flex items-center justify-between ${isComplete ? 'bg-green-50' : 'bg-slate-50'}`}>
               <div className="flex items-center gap-2">
                 <span className="text-base">{SLOT_ICONS[course.slot]}</span>
@@ -239,7 +270,6 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
             <div className="p-4 space-y-4">
               {serviceType === 'INSIGNIA' ? (
                 <>
-                  {/* Entrada (solo Insignia) — filas-opción con stock */}
                   {course.hasEntrada && (
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Entrada</label>
@@ -261,7 +291,6 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
                     </div>
                   )}
 
-                  {/* Plato fuerte (Insignia) — filas-opción con stock */}
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Plato fuerte</label>
                     <div className="space-y-2">
@@ -281,7 +310,6 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
                     </div>
                   </div>
 
-                  {/* Demanda insatisfecha */}
                   {(() => {
                     const agotadosPlatos = course.platosFuertes.filter(
                       item => getRemainingForItem(course.slot, 'plato', item.id, item.stock ?? 99) === 0
@@ -293,12 +321,9 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
                             && sel.entradaId !== item.id
                         )
                       : [];
-
                     if (agotadosPlatos.length === 0 && agotadosEntradas.length === 0) return null;
-
                     const unmetPlato = sel.unmetPlatoId;
                     const unmetEntrada = sel.unmetEntradaId;
-
                     return (
                       <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">¿Qué pidió pero no había?</p>
@@ -346,59 +371,47 @@ export const ComandaForm: React.FC<Props> = ({ passenger }) => {
                     );
                   })()}
 
-                  {/* Toggle despertar (solo Insignia) */}
                   {course.hasWakeUp && (
                     <button
-                      onClick={() =>
-                        setCourseSelection(passenger.seat, course.slot, { wakeUp: !sel.wakeUp })
-                      }
+                      onClick={() => setCourseSelection(passenger.seat, course.slot, { wakeUp: !sel.wakeUp })}
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                         sel.wakeUp
                           ? 'bg-slate-900 border-slate-900 text-white'
                           : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                       }`}
                     >
-                      <span className="text-xs font-bold">
-                        ¿Despertar para {course.label.toLowerCase()}?
-                      </span>
-                      {sel.wakeUp ? (
-                        <Bell size={16} className="text-amber-400" />
-                      ) : (
-                        <BellOff size={16} />
-                      )}
+                      <span className="text-xs font-bold">¿Despertar para {course.label.toLowerCase()}?</span>
+                      {sel.wakeUp ? <Bell size={16} className="text-amber-400" /> : <BellOff size={16} />}
                     </button>
                   )}
                 </>
               ) : (
-                <>
-                  {/* Plato fuerte (Americas) — SelectField con stock en el nombre */}
-                  <SelectField
-                    label="Plato fuerte"
-                    value={sel.platoFuerteId ?? ''}
-                    options={course.platosFuertes.map(item => ({
-                      ...item,
-                      name: `${item.name} (${getRemainingForItem(course.slot, 'plato', item.id, item.stock ?? 99)} rest.)`,
-                    }))}
-                    onChange={(id) => setCourseSelection(passenger.seat, course.slot, { platoFuerteId: id || undefined })}
-                    placeholder="— Seleccionar plato —"
-                  />
-                </>
+                <SelectField
+                  label="Plato fuerte"
+                  value={sel.platoFuerteId ?? ''}
+                  options={course.platosFuertes.map(item => ({
+                    ...item,
+                    name: `${item.name} (${getRemainingForItem(course.slot, 'plato', item.id, item.stock ?? 99)} rest.)`,
+                  }))}
+                  onChange={(id) => setCourseSelection(passenger.seat, course.slot, { platoFuerteId: id || undefined })}
+                  placeholder="— Seleccionar plato —"
+                />
               )}
             </div>
           </div>
         );
       })}
 
-      {/* Estado de la comanda */}
-      {isOrderComplete && (
+      {/* Estado de la comanda — solo pax normal */}
+      {!hasSpecialMeal && isOrderComplete && (
         <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-xl">
           <CheckCircle2 size={14} className="text-green-600" />
           <p className="text-xs font-bold text-green-700">Comanda registrada</p>
         </div>
       )}
 
-      {/* Botón "Pax no disponible" */}
-      {!isUnavailable && (
+      {/* Pax no disponible — solo pax sin comida especial */}
+      {!hasSpecialMeal && !isUnavailable && (
         <button
           onClick={() => setPaxUnavailable(passenger.seat, true)}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-500 hover:border-slate-300 hover:text-slate-700 transition-all active:scale-95"

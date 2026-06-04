@@ -75,12 +75,12 @@ const SeatCell: React.FC<SeatCellProps> = ({ seatId }) => {
   const slots = serviceType ? deriveMealSlots(serviceType, manifest.departureTime) : [];
   const courses = serviceType ? buildCourses(serviceType, slots) : [];
 
-  const isComplete = isUnavailable || (
+  const mealSSRCodes = passenger?.codes.filter((c) => MEAL_CODES.has(c)) ?? [];
+  const hasMealSSR = mealSSRCodes.length > 0;
+  const isComplete = isUnavailable || hasMealSSR || (
     order !== undefined && slots.length > 0 && slots.every((slot) => order[slot]?.platoFuerteId)
   );
   const isPartial = !isComplete && order !== undefined && slots.some((slot) => order[slot]?.platoFuerteId);
-
-  const mealSSRCodes = passenger?.codes.filter((c) => MEAL_CODES.has(c)) ?? [];
 
   // Nombre real del primer plato seleccionado
   let selectedMealName: string | null = null;

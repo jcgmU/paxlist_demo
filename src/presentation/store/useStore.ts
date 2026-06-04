@@ -141,10 +141,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     if (businessPax.length === 0) return 'empty';
 
+    const mealCodeSet = new Set(Object.keys(FLIGHT_CODES.MEALS));
     const atendidos = businessPax.filter((p) => {
-      const key = `${manifest.flightNumber}::${p.seat}`;
-      if (unavailable[key]) return true;
-      const order = orders[key];
+      if (unavailable[`${manifest.flightNumber}::${p.seat}`]) return true;
+      if (p.codes.some((c) => mealCodeSet.has(c))) return true; // comida especial SSR ya registrada
+      const order = orders[`${manifest.flightNumber}::${p.seat}`];
       return order !== undefined && slots.every((slot) => order[slot]?.platoFuerteId);
     }).length;
 
