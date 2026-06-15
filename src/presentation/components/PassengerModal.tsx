@@ -1,12 +1,12 @@
 import React from 'react';
-import { X, User, Star, Utensils, Accessibility, AlertCircle, Info } from 'lucide-react';
+import { X, User, Star, Utensils, Accessibility, AlertCircle, Info, AlertTriangle, Sparkles } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { FLIGHT_CODES } from '../../domain/flightCodes';
 import { getCabinClass } from '../../domain/cabinLookup';
 import { ComandaForm } from './ComandaForm';
 
 export const PassengerModal: React.FC = () => {
-  const { selectedSeat, setSelectedSeat, getPassengerBySeat, manifest } = useStore();
+  const { selectedSeat, setSelectedSeat, getPassengerBySeat, manifest, resolvedIssues, toggleIssueResolved } = useStore();
 
   if (!selectedSeat || !manifest) return null;
 
@@ -22,6 +22,11 @@ export const PassengerModal: React.FC = () => {
   };
 
   const close = () => setSelectedSeat(null);
+
+  const isResolved = passenger && manifest ? !!resolvedIssues[`${manifest.flightNumber}::${selectedSeat}`] : false;
+  const handleToggleResolved = () => {
+    if (selectedSeat) toggleIssueResolved(selectedSeat);
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -60,6 +65,49 @@ export const PassengerModal: React.FC = () => {
             </div>
           ) : (
             <>
+              {/* Prior Issue Banner */}
+              {passenger.priorIssue && (
+                <section className={`p-5 rounded-2xl border ${
+                  isResolved 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                    : passenger.priorIssue.severity === 'high' 
+                      ? 'bg-rose-50 border-rose-200 text-rose-900' 
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1">
+                      {isResolved ? <Sparkles size={20} className="text-emerald-600" /> : <AlertTriangle size={20} className={passenger.priorIssue.severity === 'high' ? 'text-rose-600' : 'text-amber-600'} />}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-xs font-black uppercase tracking-widest mb-1">
+                        {isResolved ? 'Atención Compensatoria Brindada' : 'Experiencia Previa Negativa'}
+                      </h4>
+                      <p className="text-sm font-medium mb-2">{passenger.priorIssue.description}</p>
+                      
+                      {!isResolved && (
+                        <div className="mb-4 p-3 bg-white/60 rounded-xl text-xs font-bold">
+                          <span className="uppercase tracking-wide text-[9px] opacity-70 block mb-1">Acción sugerida:</span>
+                          {passenger.priorIssue.action}
+                        </div>
+                      )}
+                      
+                      <button 
+                        onClick={handleToggleResolved}
+                        className={`w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-wide transition-all ${
+                          isResolved 
+                            ? 'bg-white text-emerald-700 hover:bg-emerald-100 border border-emerald-200' 
+                            : passenger.priorIssue.severity === 'high'
+                              ? 'bg-rose-600 text-white hover:bg-rose-700 shadow-md'
+                              : 'bg-amber-500 text-white hover:bg-amber-600 shadow-md'
+                        }`}
+                      >
+                        {isResolved ? 'Revertir estado' : 'Marcar atención ofrecida'}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {/* Nombre */}
               <section>
                 <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest block mb-2">

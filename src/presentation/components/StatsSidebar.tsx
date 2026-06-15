@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { SearchBar } from './SearchBar';
-import { Users, Utensils, Accessibility, Baby, BarChart2, ChevronDown, Star, Diamond, ChefHat, Bell, CheckCircle2 } from 'lucide-react';
+import { Users, Utensils, Accessibility, Baby, BarChart2, ChevronDown, Star, Diamond, ChefHat, Bell, CheckCircle2, AlertTriangle, Sparkles } from 'lucide-react';
 import type { ParsedPassenger } from '../../infrastructure/mockData';
 import { getCabinClass } from '../../domain/cabinLookup';
 import { deriveMealSlots, buildCourses } from '../../domain/mealService';
@@ -113,6 +113,56 @@ const EliteSection: React.FC<EliteSectionProps> = ({ diamondPax, goldPax }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+interface PriorIssuesSectionProps {
+  passengers: ParsedPassenger[];
+  resolvedIssues: Record<string, boolean>;
+  flightNumber: string;
+}
+
+const PriorIssuesSection: React.FC<PriorIssuesSectionProps> = ({ passengers, resolvedIssues, flightNumber }) => {
+  const paxWithIssues = passengers.filter(p => p.priorIssue);
+  if (paxWithIssues.length === 0) return null;
+
+  return (
+    <div className="mt-6 pt-4 border-t border-slate-100">
+      <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3">Atención Experiencia (NPS)</h3>
+      <div className="space-y-2">
+        {paxWithIssues.map(p => {
+          const isResolved = resolvedIssues[`${flightNumber}::${p.seat}`];
+          const severity = p.priorIssue?.severity;
+          
+          return (
+            <div key={p.seat} className={`p-2.5 rounded-xl flex items-start gap-2 border ${
+              isResolved 
+                ? 'bg-emerald-50 border-emerald-100' 
+                : severity === 'high' ? 'bg-rose-50 border-rose-100' : 'bg-amber-50 border-amber-100'
+            }`}>
+              <div className="mt-0.5">
+                {isResolved ? (
+                  <Sparkles size={14} className="text-emerald-600" />
+                ) : (
+                  <AlertTriangle size={14} className={severity === 'high' ? 'text-rose-600' : 'text-amber-600'} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[11px] font-black text-slate-900">{p.seat} <span className="font-bold text-slate-600">— {p.lastName}</span></span>
+                  <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full ${
+                    isResolved ? 'bg-emerald-200 text-emerald-800' : severity === 'high' ? 'bg-rose-200 text-rose-800' : 'bg-amber-200 text-amber-800'
+                  }`}>
+                    {isResolved ? 'Atendido' : 'Pendiente'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-600 leading-tight line-clamp-2">{p.priorIssue?.description}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -422,7 +472,7 @@ const ComandaSection: React.FC<ComandaSectionProps> = ({ manifest, orders, servi
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const StatsSidebar: React.FC = () => {
-  const { manifest, getFlightStats, orders, getActiveServiceType, unavailable } = useStore();
+  const { manifest, getFlightStats, orders, getActiveServiceType, unavailable, resolvedIssues } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
 
@@ -472,6 +522,7 @@ export const StatsSidebar: React.FC = () => {
             cols={2}
           />
           <EliteSection diamondPax={diamondPax} goldPax={goldPax} />
+          <PriorIssuesSection passengers={manifest.passengers} resolvedIssues={resolvedIssues} flightNumber={manifest.flightNumber} />
 
           {activeServiceType && (
             <ComandaSection
@@ -484,19 +535,34 @@ export const StatsSidebar: React.FC = () => {
         </div>
 
         <div className="mt-4 pt-4 border-t border-slate-100 shrink-0">
-          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter text-center">
-            Avianca SeatMap Pro v1.2
+          <p className="text-[9px] font-bold uppercase tracking-tighter text-center">
+            <span className="text-[#E20613]">Avianca</span> <span className="text-slate-900">SeatMap Pro v1.2</span>
           </p>
         </div>
       </aside>
 
       {/* Mobile/Tablet (< lg): barra sticky fixed que expande hacia arriba */}
       <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+        {/* Barra trigger siempre visible */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between px-4 h-14 bg-white"
+        >
+          <span className="flex items-center gap-2">
+            <BarChart2 size={18} className="text-[#E20613]" />
+            <span className="font-black uppercase italic tracking-tighter text-[#E20613]">ESTADÍSTICAS</span>
+          </span>
+          <ChevronDown
+            size={18}
+            className={`text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+
         <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[70vh] opacity-100' : 'max-h-0 opacity-0'}`}>
-          <div className="overflow-y-auto max-h-[70vh] px-4 pb-4 pt-4 space-y-3 bg-white border-t border-slate-100">
+          <div className="overflow-y-auto max-h-[70vh] px-4 pb-4 pt-0 space-y-3 bg-white border-t border-slate-100">
             <SearchBar />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mt-4">
               <StatCard icon={<Users size={16}/>} label="Pax a bordo" value={totalPassengers} color="bg-slate-100 text-slate-600" />
               <StatCard icon={<Users size={16}/>} label="Vacías" value={emptySeats} color="bg-indigo-100 text-indigo-700" />
               <StatCard icon={<Baby size={16}/>} label="Infantes" value={infantCount} color="bg-sky-100 text-sky-700" />
@@ -515,6 +581,7 @@ export const StatsSidebar: React.FC = () => {
               cols={3}
             />
             <EliteSection diamondPax={diamondPax} goldPax={goldPax} />
+            <PriorIssuesSection passengers={manifest.passengers} resolvedIssues={resolvedIssues} flightNumber={manifest.flightNumber} />
 
             {activeServiceType && (
               <ComandaSection
@@ -526,21 +593,6 @@ export const StatsSidebar: React.FC = () => {
             )}
           </div>
         </div>
-
-        {/* Barra trigger siempre visible */}
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="w-full flex items-center justify-between px-4 h-14"
-        >
-          <span className="flex items-center gap-2">
-            <BarChart2 size={18} className="text-[#E20613]" />
-            <span className="font-black uppercase italic tracking-tighter text-[#E20613]">ESTADÍSTICAS</span>
-          </span>
-          <ChevronDown
-            size={18}
-            className={`text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
       </div>
     </>
   );

@@ -29,6 +29,8 @@ interface AppState {
   unavailable: Record<string, boolean>;
   crewZone: CrewZone | null;
   comandaOpen: boolean;
+  resolvedIssues: Record<string, boolean>;
+  toggleIssueResolved: (seat: string) => void;
 
   setManifest: (manifest: FlightManifest | null) => void;
   setSelectedSeat: (seat: string | null) => void;
@@ -65,12 +67,13 @@ export const useStore = create<AppState>((set, get) => ({
   unavailable: {},
   crewZone: null,
   comandaOpen: false,
+  resolvedIssues: {},
 
-  setManifest: (manifest) => set({ manifest, serviceOverride: null, orders: {}, unavailable: {}, crewZone: null, comandaOpen: false }),
+  setManifest: (manifest) => set({ manifest, serviceOverride: null, orders: {}, unavailable: {}, crewZone: null, comandaOpen: false, resolvedIssues: {} }),
   setSelectedSeat: (seat) => set({ selectedSeat: seat }),
   setSearchTerm: (term) => set({ searchTerm: term }),
   setServiceOverride: (type) => set({ serviceOverride: type }),
-  reset: () => set({ manifest: null, selectedSeat: null, searchTerm: '', serviceOverride: null, orders: {}, unavailable: {}, crewZone: null, comandaOpen: false }),
+  reset: () => set({ manifest: null, selectedSeat: null, searchTerm: '', serviceOverride: null, orders: {}, unavailable: {}, crewZone: null, comandaOpen: false, resolvedIssues: {} }),
 
   setCourseSelection: (seat, slot, patch) => {
     const { manifest, orders } = get();
@@ -103,6 +106,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setCrewZone: (zone) => set({ crewZone: zone }),
+
+  toggleIssueResolved: (seat) => {
+    const { manifest, resolvedIssues } = get();
+    if (!manifest) return;
+    const key = `${manifest.flightNumber}::${seat}`;
+    set({ resolvedIssues: { ...resolvedIssues, [key]: !resolvedIssues[key] } });
+  },
 
   openComanda: () => set({ comandaOpen: true }),
 

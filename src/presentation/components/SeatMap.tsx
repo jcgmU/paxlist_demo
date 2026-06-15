@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Search,
   CheckCircle2,
+  AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { AIRCRAFT_CONFIGS } from '../../domain/aircraftConfigs';
@@ -27,7 +29,7 @@ const IconMap: Record<string, React.FC<{ size?: number; className?: string }>> =
 };
 
 export const SeatMap: React.FC = () => {
-  const { manifest, selectedSeat, setSelectedSeat, getPassengerBySeat, searchTerm, getOrder, getActiveServiceType } = useStore();
+  const { manifest, selectedSeat, setSelectedSeat, getPassengerBySeat, searchTerm, getOrder, getActiveServiceType, resolvedIssues } = useStore();
   const [showSearch, setShowSearch] = useState(false);
 
   if (!manifest) return null;
@@ -43,6 +45,8 @@ export const SeatMap: React.FC = () => {
     if (!order || slots.length === 0) return false;
     return slots.every((slot) => order[slot]?.platoFuerteId);
   };
+
+  const isIssueResolved = (seatId: string) => !!resolvedIssues[`${manifest.flightNumber}::${seatId}`];
 
   return (
     <div className="flex flex-col lg:flex-row w-full lg:h-full gap-6 fade-in lg:overflow-hidden">
@@ -83,6 +87,7 @@ export const SeatMap: React.FC = () => {
                 onSelect={setSelectedSeat}
                 searchTerm={searchTerm}
                 hasCompleteOrder={hasCompleteOrder}
+                isIssueResolved={isIssueResolved}
               />
             ))}
           </div>
@@ -99,7 +104,8 @@ const RenderElement: React.FC<{
   onSelect: (seat: string) => void;
   searchTerm: string;
   hasCompleteOrder: (seatId: string) => boolean;
-}> = ({ element, getPassenger, selectedSeat, onSelect, searchTerm, hasCompleteOrder }) => {
+  isIssueResolved: (seatId: string) => boolean;
+}> = ({ element, getPassenger, selectedSeat, onSelect, searchTerm, hasCompleteOrder, isIssueResolved }) => {
   
   if (element.type === 'facility') {
     const isOWE = element.doors.includes('OWE');
@@ -176,6 +182,7 @@ const RenderElement: React.FC<{
                 isHighlighted={isHighlighted}
                 isBlocked={isBlocked}
                 hasOrder={hasCompleteOrder(seatId)}
+                isResolved={isIssueResolved(seatId)}
                 onClick={() => !isBlocked && onSelect(seatId)}
               />
             );
@@ -193,8 +200,9 @@ const Seat: React.FC<{
   isHighlighted?: boolean;
   isBlocked?: boolean;
   hasOrder?: boolean;
+  isResolved?: boolean;
   onClick: () => void;
-}> = ({ id, passenger, isSelected, isHighlighted, isBlocked, hasOrder, onClick }) => {
+}> = ({ id, passenger, isSelected, isHighlighted, isBlocked, hasOrder, isResolved, onClick }) => {
   
   // Determinación de color de fondo según reglas
   let bgColor = 'bg-slate-200'; // Libre
@@ -265,6 +273,21 @@ const Seat: React.FC<{
           </div>
         )}
       </div>
+
+      {/* Prior Issue Badge (esquina superior izquierda) */}
+      {passenger?.priorIssue && (
+        <div className={`absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full border-2 border-white flex items-center justify-center text-white shadow-sm transition-colors ${
+          isResolved 
+            ? 'bg-emerald-500' 
+            : passenger.priorIssue.severity === 'high' ? 'bg-rose-600 animate-pulse' : 'bg-amber-500'
+        }`}>
+          {isResolved ? (
+            <Sparkles size={8} strokeWidth={3} />
+          ) : (
+            <AlertTriangle size={8} strokeWidth={3} />
+          )}
+        </div>
+      )}
 
       {/* Badge comanda completa (esquina inferior izquierda) */}
       {hasOrder && (

@@ -7,6 +7,11 @@ export interface ParsedPassenger {
   status?: string;
   codes: string[];
   rawText: string;
+  priorIssue?: {
+    description: string;
+    action: string;
+    severity: 'high' | 'medium';
+  };
 }
 
 export interface FlightManifest {
@@ -36,12 +41,24 @@ const pax = (
   rawText: `${seat} ${lastName}/${firstName}`,
 });
 
+const paxWithIssue = (
+  seat: string,
+  lastName: string,
+  firstName: string,
+  status: string | undefined,
+  codes: string[],
+  priorIssue: NonNullable<ParsedPassenger['priorIssue']>
+): ParsedPassenger => ({
+  ...pax(seat, lastName, firstName, status, codes),
+  priorIssue
+});
+
 // ─── Vuelo 1: AV210 BOG → JFK — 07:20 — Business Class Americas ──────────────
 // 1 servicio: Desayuno (solo plato fuerte, sin entrada, sin despertar)
 export const FLIGHT_AV210: FlightManifest = {
   flightNumber: 'AV210',
   date: '03 JUN 2026',
-  aircraftType: 'B787-8',
+  aircraftType: 'A320',
   origin: 'BOG',
   destination: 'JFK',
   departureTime: '07:20',
@@ -49,7 +66,11 @@ export const FLIGHT_AV210: FlightManifest = {
   infantCount: 2,
   passengers: [
     // Business Class (filas 1-5, layout A/D/E/K)
-    pax('1A', 'RAMIREZ', 'CARLOS', 'DIAM'),
+    paxWithIssue('1A', 'RAMIREZ', 'CARLOS', 'DIAM', [], {
+      description: 'Se agotó su primera opción de comida en el vuelo anterior.',
+      action: 'Tomar su orden de comida antes que a los demás pasajeros para garantizar su opción preferida.',
+      severity: 'medium'
+    }),
     pax('1D', 'OSPINA', 'LUCIA', 'DIAM'),
     pax('1E', 'BOTERO', 'ANDRES', 'GOLD'),
     pax('1K', 'VILLA', 'CATALINA'),
@@ -60,7 +81,11 @@ export const FLIGHT_AV210: FlightManifest = {
     pax('3A', 'ARANGO', 'JUAN'),
     pax('3D', 'VELASQUEZ', 'SOFIA', 'GOLD'),
     pax('3E', 'RIOS', 'FELIPE'),
-    pax('3K', 'GARCIA', 'VALENTINA'),
+    paxWithIssue('3K', 'GARCIA', 'VALENTINA', undefined, [], {
+      description: 'Servicio desatento o falta de calidez por parte de la tripulación en el vuelo previo.',
+      action: 'El Jefe de Cabina se acerca, lo saluda por su nombre, se disculpa por la experiencia anterior y le ofrece una bebida de cortesía extra.',
+      severity: 'high'
+    }),
     pax('4A', 'MEJIA', 'SANTIAGO', 'DIAM'),
     pax('4E', 'CANO', 'MARIA'),
     pax('5D', 'HERRERA', 'ROBERTO', 'GOLD', ['VGML']),
@@ -212,8 +237,16 @@ export const FLIGHT_AV026: FlightManifest = {
     pax('2A', 'OSORIO', 'BEATRIZ', 'GOLD', ['VGML']),
     pax('2D', 'SALCEDO', 'HECTOR'),
     pax('2E', 'TORO', 'ADRIANA'),
-    pax('2K', 'URIBE', 'CAMILO'),
-    pax('3A', 'VILLA', 'DIANA', 'DIAM'),
+    paxWithIssue('2K', 'URIBE', 'CAMILO', undefined, [], {
+      description: 'Asiento sucio o con residuos al momento de abordar en su último vuelo.',
+      action: 'Inspeccionar su asiento minuciosamente antes del abordaje y ofrecerle toallitas húmedas premium al llegar.',
+      severity: 'medium'
+    }),
+    paxWithIssue('3A', 'VILLA', 'DIANA', 'DIAM', [], {
+      description: 'No recibió atención especial por su cumpleaños que estaba registrado en la reserva en su vuelo anterior.',
+      action: 'Entregarle una tarjeta firmada por la tripulación actual y ofrecerle un postre o copa de champaña de cortesía.',
+      severity: 'medium'
+    }),
     pax('3D', 'ZULUAGA', 'ERNESTO'),
     pax('3E', 'AGUDELO', 'FERNANDA', 'GOLD'),
     pax('3K', 'BETANCUR', 'GONZALO'),
@@ -222,7 +255,11 @@ export const FLIGHT_AV026: FlightManifest = {
     pax('5D', 'ESCOBAR', 'JANETH'),
     pax('5K', 'FRANCO', 'KENIA'),
     // Plus (filas 8-11)
-    pax('8A', 'GIRALDO', 'LISARDO'),
+    paxWithIssue('8A', 'GIRALDO', 'LISARDO', undefined, [], {
+      description: 'No había stock de la bebida de venta a bordo que quería comprar en su último vuelo.',
+      action: 'Reservarle proactivamente ese producto específico y ofrecérselo de cortesía durante el servicio.',
+      severity: 'medium'
+    }),
     pax('8B', 'HOYOS', 'MARTHA'),
     pax('8C', 'ISAZA', 'NELSON'),
     pax('8D', 'JARAMILLO', 'ORFILIA'),
@@ -255,7 +292,11 @@ export const FLIGHT_AV026: FlightManifest = {
     pax('14B', 'OBANDO', 'NESTOR'),
     pax('14C', 'PIEDRAHITA', 'OLGA'),
     pax('14D', 'QUINTERO', 'PABLO'),
-    pax('14E', 'RINCON', 'RAQUEL', undefined, ['PETC']),
+    paxWithIssue('14E', 'RINCON', 'RAQUEL', undefined, ['PETC'], {
+      description: 'Derrame accidental de líquidos por un tripulante en el vuelo anterior sin disculpas formales.',
+      action: 'Pedir disculpas formales a nombre de la aerolínea y brindarle atención preferencial en el servicio.',
+      severity: 'high'
+    }),
     pax('14K', 'SALAZAR', 'SERGIO'),
     pax('15A', 'TRUJILLO', 'TATIANA'),
     pax('15B', 'VASQUEZ', 'URIEL'),
@@ -331,25 +372,41 @@ export const FLIGHT_AV120: FlightManifest = {
   passengers: [
     // Business Class
     pax('1A', 'LLINÁS', 'GUSTAVO', 'DIAM'),
-    pax('1D', 'BARRIOS', 'MARINA', 'DIAM'),
+    paxWithIssue('1D', 'BARRIOS', 'MARINA', 'DIAM', [], {
+      description: 'Falta de elementos de confort (se agotaron las cobijas) en su vuelo nocturno anterior.',
+      action: 'Entregarle proactivamente un kit de confort (cobija premium, almohada) antes del despegue.',
+      severity: 'medium'
+    }),
     pax('1E', 'CAMPO', 'DAVID', 'GOLD'),
     pax('1K', 'DIAZ', 'CONSUELO'),
     pax('2A', 'ESPINOSA', 'FIDEL', 'DIAM'),
     pax('2D', 'FUENTES', 'GRACIELA'),
     pax('2E', 'GAMBOA', 'HERNAN'),
     pax('2K', 'IBAÑEZ', 'JACINTA', undefined, ['VGML']),
-    pax('3A', 'JARABA', 'KEVIN', 'GOLD'),
+    paxWithIssue('3A', 'JARABA', 'KEVIN', 'GOLD', [], {
+      description: 'Timbre de llamado (call bell) ignorado por más de 30 minutos en su último vuelo.',
+      action: 'Asegurarle que en este vuelo estarán pendientes y hacer rondas frecuentes por su asiento.',
+      severity: 'high'
+    }),
     pax('3D', 'LEAL', 'LINA'),
     pax('3E', 'MARTINEZ', 'MARIO'),
     pax('3K', 'NAVARRO', 'NATALIA', 'GOLD'),
     pax('4A', 'OLMOS', 'OMAR'),
     pax('4E', 'POLO', 'PATRICIA', undefined, ['GFML']),
-    pax('5D', 'QUIÑONES', 'RAUL', 'DIAM'),
+    paxWithIssue('5D', 'QUIÑONES', 'RAUL', 'DIAM', [], {
+      description: 'Interrupción del sueño por ruido excesivo de la tripulación en la cocina (galley) en el vuelo pasado.',
+      action: 'Entregarle tapones para los oídos y antifaz, asegurando que esta vez el equipo será muy silencioso.',
+      severity: 'high'
+    }),
     pax('5K', 'REALES', 'SANDRA'),
     // Plus (filas 8-11)
     pax('8A', 'SIERRA', 'TOMAS'),
     pax('8B', 'TORRES', 'URSULA'),
-    pax('8C', 'ULLOA', 'VALENTINA'),
+    paxWithIssue('8C', 'ULLOA', 'VALENTINA', undefined, [], {
+      description: 'Asiento asignado sucio o con residuos al momento de abordar en el vuelo de ida.',
+      action: 'Inspeccionar el asiento antes del abordaje y entregarle toallitas sanitarias premium.',
+      severity: 'medium'
+    }),
     pax('8D', 'VIVEROS', 'WILLIAM'),
     pax('8E', 'YAÑEZ', 'XAVIER', undefined, ['BBML']),
     pax('8G', 'ZARATE', 'YOLANDA'),

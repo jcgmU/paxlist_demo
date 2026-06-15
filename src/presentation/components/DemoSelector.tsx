@@ -34,7 +34,7 @@ export const DemoSelector: React.FC = () => {
             <Plane size={28} />
           </div>
           <h1 className="text-4xl font-black text-slate-900 italic tracking-tight">
-            Avianca <span className="text-[#E20613] not-italic">SeatMap Pro</span>
+            <span className="text-[#E20613]">Avianca</span> <span className="text-slate-900 not-italic">SeatMap Pro</span>
           </h1>
         </div>
         <p className="text-slate-500 text-sm font-medium max-w-md mx-auto">
